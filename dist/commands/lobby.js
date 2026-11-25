@@ -63,19 +63,9 @@ function execute(interaction) {
                 }
             }
             const embed = buildLobbyEmbed({ game, size, players: [interaction.user.id], creatorId: interaction.user.id, startsAt });
-            const tempRow = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
-                .setCustomId(`join:${interaction.id}`) // placeholder; fix after send
-                .setLabel('Join')
-                .setStyle(discord_js_1.ButtonStyle.Primary), new discord_js_1.ButtonBuilder()
-                .setCustomId(`leave:${interaction.id}`)
-                .setLabel('Leave')
-                .setStyle(discord_js_1.ButtonStyle.Secondary));
-            // Send the message first
-            const reply = yield interaction.reply({
-                embeds: [embed],
-                components: [tempRow],
-            });
-            const msg = yield reply.fetch();
+            // Attach buttons only after the real message ID is available.
+            yield interaction.reply({ embeds: [embed] });
+            const msg = yield interaction.fetchReply();
             /* --- save lobby in memory --- */
             LobbyManager_1.lobbyManager.create({
                 id: msg.id,
@@ -87,13 +77,8 @@ function execute(interaction) {
                 startsAt,
                 expiresAt: (startsAt !== null && startsAt !== void 0 ? startsAt : Date.now()) + 3 * 60 * 60 * 1000,
             });
-            /* --- replace temp IDs with the real message ID (TS‑safe casts) --- */
-            const fixedRow = discord_js_1.ActionRowBuilder.from(tempRow);
-            fixedRow.components.forEach(btn => {
-                const b = btn;
-                b.setCustomId(b.data.custom_id.replace(interaction.id, msg.id));
-            });
-            yield msg.edit({ components: [fixedRow] });
+            const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder().setCustomId(`join:${msg.id}`).setLabel('Join').setStyle(discord_js_1.ButtonStyle.Primary), new discord_js_1.ButtonBuilder().setCustomId(`leave:${msg.id}`).setLabel('Leave').setStyle(discord_js_1.ButtonStyle.Secondary));
+            yield msg.edit({ components: [row] });
         }
         /* ──────────────── LIST ──────────────── */
         else if (sub === 'list') {
@@ -101,17 +86,30 @@ function execute(interaction) {
             if (!open.length) {
                 return interaction.reply({ content: 'No open lobbies.', ephemeral: true });
             }
-            // Render current state, not a potentially stale or deleted source message.
-            yield interaction.deferReply();
-            for (const [i, lobby] of open.entries()) {
-                const embed = buildLobbyEmbed(lobby);
-                const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder().setCustomId(`join:${lobby.id}`).setLabel('Join').setStyle(discord_js_1.ButtonStyle.Primary), new discord_js_1.ButtonBuilder().setCustomId(`leave:${lobby.id}`).setLabel('Leave').setStyle(discord_js_1.ButtonStyle.Secondary));
-                const payload = { embeds: [embed], components: [row], allowedMentions: { parse: [] } };
-                if (i === 0)
-                    yield interaction.editReply(payload);
-                else
-                    yield interaction.followUp(payload);
+            const lines = open.map(lobby => {
+                const game = lobby.game.replace(/[\r\n]/g, ' ').replace(/([\\*_`~|\[\]])/g, '\\$1');
+                const schedule = lobby.startsAt === undefined
+                    ? 'Not scheduled'
+                    : `<t:${Math.floor(lobby.startsAt / 1000)}:f>`;
+                return `**${game}** (${lobby.players.length}/${lobby.size}) — <@${lobby.creatorId}>\n${schedule}`;
+            });
+            // Discord limits a single embed description to 4096 characters.
+            let description = '';
+            let shown = 0;
+            for (const line of lines) {
+                if (description.length + line.length + 2 > 4000)
+                    break;
+                description += (description ? '\n\n' : '') + line;
+                shown++;
             }
+            if (shown < open.length)
+                description += `\n\n${open.length - shown} more lobbies exceed Discord's single-embed limit.`;
+            const embed = new discord_js_1.EmbedBuilder()
+                .setTitle('Active lobbies')
+                .setColor(0x57f287)
+                .setDescription(description)
+                .setFooter({ text: `${open.length} active lobbies • Times shown in your local timezone` });
+            yield interaction.reply({ embeds: [embed], components: [], allowedMentions: { parse: [] } });
         }
         /* ──────────────── CANCEL ──────────────── */
         else if (sub === 'cancel') {

@@ -51,13 +51,11 @@ const rest = new discord_js_1.REST({ version: '10' }).setToken(process.env.DISCO
 (() => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log('🔄  Refreshing slash commands…');
-        // ── add these two lines ↓↓↓ for sanity check
-        console.log('CLIENT_ID =', process.env.CLIENT_ID);
-        console.log('GUILD_ID  =', process.env.GUILD_ID);
         yield rest.put(discord_js_1.Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commands });
         console.log('✅  Commands deployed to guild.');
     }
     catch (err) {
         console.error(err);
+        process.exitCode = 1;
     }
 }))();

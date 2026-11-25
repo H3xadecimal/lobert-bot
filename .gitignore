@@ -1,2 +1,2 @@
-node_modules/ # ignore huge dependency folder
+node_modules/
 .env
