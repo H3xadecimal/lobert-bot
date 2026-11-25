@@ -46,39 +46,66 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var _LobbyManager_lobbies;
+var _LobbyManager_lobbies, _LobbyManager_timers;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lobbyManager = void 0;
+exports.lobbyManager = exports.LobbyManager = void 0;
 const discord_js_1 = require("discord.js");
 class LobbyManager {
-    constructor() {
+    constructor(actions) {
+        this.actions = actions;
         _LobbyManager_lobbies.set(this, new discord_js_1.Collection());
+        _LobbyManager_timers.set(this, new Map());
     }
     create(lobby) {
+        this.delete(lobby.id);
         __classPrivateFieldGet(this, _LobbyManager_lobbies, "f").set(lobby.id, lobby);
-        setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+        const timers = [];
+        __classPrivateFieldGet(this, _LobbyManager_timers, "f").set(lobby.id, timers);
+        if (lobby.startsAt !== undefined) {
+            timers.push(setTimeout(() => {
+                if (this.get(lobby.id) !== lobby)
+                    return;
+                void this.actions.start(lobby).catch(error => console.error('Lobby start ping failed:', error));
+            }, Math.max(0, lobby.startsAt - Date.now())));
+        }
+        timers.push(setTimeout(() => {
+            if (this.get(lobby.id) !== lobby)
+                return;
             this.delete(lobby.id);
-            try {
-                const { client } = yield Promise.resolve().then(() => __importStar(require('../index')));
-                const channel = yield client.channels.fetch(lobby.channelId);
-                if (channel === null || channel === void 0 ? void 0 : channel.isTextBased()) {
-                    channel.messages.delete(lobby.id).catch(() => null);
-                }
-            }
-            catch (_a) {
-                // ignore
-            }
-        }), 3 * 60 * 60 * 1000);
+            void this.actions.expire(lobby).catch(error => console.error('Lobby expiration failed:', error));
+        }, Math.max(0, lobby.expiresAt - Date.now())));
     }
-    get(id) {
-        return __classPrivateFieldGet(this, _LobbyManager_lobbies, "f").get(id);
-    }
+    get(id) { return __classPrivateFieldGet(this, _LobbyManager_lobbies, "f").get(id); }
     delete(id) {
+        var _a;
+        for (const timer of (_a = __classPrivateFieldGet(this, _LobbyManager_timers, "f").get(id)) !== null && _a !== void 0 ? _a : [])
+            clearTimeout(timer);
+        __classPrivateFieldGet(this, _LobbyManager_timers, "f").delete(id);
         __classPrivateFieldGet(this, _LobbyManager_lobbies, "f").delete(id);
     }
-    list() {
-        return Array.from(__classPrivateFieldGet(this, _LobbyManager_lobbies, "f").values());
-    }
+    list() { return Array.from(__classPrivateFieldGet(this, _LobbyManager_lobbies, "f").values()); }
 }
-_LobbyManager_lobbies = new WeakMap();
-exports.lobbyManager = new LobbyManager();
+exports.LobbyManager = LobbyManager;
+_LobbyManager_lobbies = new WeakMap(), _LobbyManager_timers = new WeakMap();
+exports.lobbyManager = new LobbyManager({
+    start(lobby) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { client } = yield Promise.resolve().then(() => __importStar(require('../index')));
+            const channel = yield client.channels.fetch(lobby.channelId);
+            if (!(channel === null || channel === void 0 ? void 0 : channel.isTextBased()) || !channel.isSendable())
+                return;
+            yield channel.send({
+                content: `⏰ Time for ${lobby.game}! ${lobby.players.map(id => `<@${id}>`).join(' ')}`,
+                allowedMentions: { parse: [], users: lobby.players },
+            });
+        });
+    },
+    expire(lobby) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { client } = yield Promise.resolve().then(() => __importStar(require('../index')));
+            const channel = yield client.channels.fetch(lobby.channelId);
+            if (channel === null || channel === void 0 ? void 0 : channel.isTextBased())
+                yield channel.messages.delete(lobby.id);
+        });
+    },
+});
