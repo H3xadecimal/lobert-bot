@@ -5,13 +5,13 @@ exports.parseStartTime = parseStartTime;
 function parseStartTime(input, now = Date.now()) {
     const match = /^(\d{2}):(\d{2})(?:([+-])(\d{2}):(\d{2}))?$/.exec(input.trim());
     if (!match)
-        throw new Error('Use HH:mm (Mauritius, UTC+04:00), or HH:mm+04:00 / HH:mm-05:00.');
+        throw new Error('Use 24-hour HH:mm with a colon, e.g. 19:00 (not 1900 or 7pm). Default: Mauritius (UTC+04:00). Optional offset: 19:00-05:00.');
     const [, h, m, sign, oh = '4', om = '0'] = match;
     const hours = Number(h), minutes = Number(m);
     const offsetHours = Number(oh), offsetMinutes = Number(om);
     if (hours > 23 || minutes > 59 || offsetHours > 14 || offsetMinutes > 59 ||
         (offsetHours === 14 && offsetMinutes !== 0)) {
-        throw new Error('Invalid time or UTC offset. Use 00:00–23:59 and offsets up to ±14:00.');
+        throw new Error('Invalid time or UTC offset. Use 24-hour HH:mm, e.g. 19:00 (Mauritius UTC+04:00), within 00:00–23:59 and offsets up to ±14:00.');
     }
     const offset = (sign === '-' ? -1 : 1) * (offsetHours * 60 + offsetMinutes) * 60000;
     const local = new Date(now + offset);
