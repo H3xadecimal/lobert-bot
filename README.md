@@ -105,7 +105,7 @@ Maintained by
 ## Scheduled lobby pings
 
 Use `/lobby create game:Valorant size:5 time:21:00` to ping the current
-lobby roster at the next 21:00 **UTC**. To specify a local UTC offset, use
+lobby roster at the next 21:00 **Mauritius time (Indian/Mauritius, UTC+04:00)**, regardless of the server timezone. Mauritius does not currently observe daylight saving time. To override the default UTC offset, use
 `time:21:00+04:00` or `time:21:00-05:00`. Offsets are fixed; adjust them for
 daylight saving time when needed. Times already reached today mean tomorrow.
 The embed shows the start in each Discord viewer's local timezone.

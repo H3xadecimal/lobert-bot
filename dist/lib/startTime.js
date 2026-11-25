@@ -1,12 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseStartTime = parseStartTime;
-/** Next occurrence of HH:mm, optionally followed by a UTC offset. Defaults to UTC. */
+/** Next occurrence of HH:mm, optionally followed by a UTC offset. Defaults to Mauritius time (UTC+04:00). */
 function parseStartTime(input, now = Date.now()) {
     const match = /^(\d{2}):(\d{2})(?:([+-])(\d{2}):(\d{2}))?$/.exec(input.trim());
     if (!match)
-        throw new Error('Use HH:mm (UTC), or HH:mm+04:00 / HH:mm-05:00.');
-    const [, h, m, sign, oh = '0', om = '0'] = match;
+        throw new Error('Use HH:mm (Mauritius, UTC+04:00), or HH:mm+04:00 / HH:mm-05:00.');
+    const [, h, m, sign, oh = '4', om = '0'] = match;
     const hours = Number(h), minutes = Number(m);
     const offsetHours = Number(oh), offsetMinutes = Number(om);
     if (hours > 23 || minutes > 59 || offsetHours > 14 || offsetMinutes > 59 ||

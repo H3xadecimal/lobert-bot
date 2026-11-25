@@ -21,7 +21,7 @@ exports.data = new discord_js_1.SlashCommandBuilder()
     .setDescription('Create a new lobby')
     .addStringOption(o => o.setName('game').setDescription('Game name').setRequired(true))
     .addIntegerOption(o => o.setName('size').setDescription('Number of players').setRequired(true))
-    .addStringOption(o => o.setName('time').setDescription('Start time HH:mm (UTC), or HH:mm+04:00 with a UTC offset')))
+    .addStringOption(o => o.setName('time').setDescription('Start HH:mm (Mauritius UTC+4), or include an offset like HH:mm-05:00')))
     .addSubcommand(sc => sc.setName('list').setDescription('List open lobbies'))
     .addSubcommand(sc => sc.setName('cancel').setDescription('Cancel your lobby'));
 function execute(interaction) {

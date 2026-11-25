@@ -20,7 +20,7 @@ import {
         .addIntegerOption(o =>
           o.setName('size').setDescription('Number of players').setRequired(true))
         .addStringOption(o =>
-          o.setName('time').setDescription('Start time HH:mm (UTC), or HH:mm+04:00 with a UTC offset')))
+          o.setName('time').setDescription('Start HH:mm (Mauritius UTC+4), or include an offset like HH:mm-05:00')))
     .addSubcommand(sc =>
       sc.setName('list').setDescription('List open lobbies'))
     .addSubcommand(sc =>

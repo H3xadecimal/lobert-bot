@@ -5,10 +5,10 @@ const { LobbyManager } = require('../dist/lib/LobbyManager');
 const { data, execute } = require('../dist/commands/lobby');
 
 const now = Date.parse('2026-11-25T18:00:00Z');
-test('time parsing uses explicit UTC and rolls passed times to tomorrow', () => {
-  assert.equal(parseStartTime('21:00', now), Date.parse('2026-11-25T21:00:00Z'));
-  assert.equal(parseStartTime('17:00', now), Date.parse('2026-11-26T17:00:00Z'));
-  assert.equal(parseStartTime('18:00', now), Date.parse('2026-11-26T18:00:00Z'));
+test('time parsing defaults to Mauritius and rolls passed times to tomorrow', () => {
+  assert.equal(parseStartTime('21:00', now), Date.parse('2026-11-26T17:00:00Z'));
+  assert.equal(parseStartTime('23:00', now), Date.parse('2026-11-25T19:00:00Z'));
+  assert.equal(parseStartTime('22:00', now), Date.parse('2026-11-26T18:00:00Z'));
 });
 test('positive and negative offsets cross dates correctly', () => {
   assert.equal(parseStartTime('23:00+04:00', now), Date.parse('2026-11-25T19:00:00Z'));
@@ -63,4 +63,14 @@ test('unscheduled lobbies retain expiration without a start ping', t => {
   t.mock.timers.tick(3 * 3600000);
   assert.equal(starts, 0);
   assert.equal(expires, 1);
+});
+
+test('Mauritius default uses the local calendar date across UTC midnight', () => {
+  const late = Date.parse('2026-11-25T22:00:00Z'); // 02:00 next day in Mauritius
+  assert.equal(parseStartTime('03:00', late), Date.parse('2026-11-25T23:00:00Z'));
+  assert.equal(parseStartTime('01:00', late), Date.parse('2026-11-26T21:00:00Z'));
+});
+test('explicit UTC overrides Mauritius default', () => {
+  assert.equal(parseStartTime('21:00+00:00', now), Date.parse('2026-11-25T21:00:00Z'));
+  assert.equal(parseStartTime('21:00', now), parseStartTime('21:00+04:00', now));
 });
