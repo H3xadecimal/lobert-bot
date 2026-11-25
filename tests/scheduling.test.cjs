@@ -109,7 +109,7 @@ for (const [input, expected] of [['19:00', '26 Nov 2026, 19:00'], ['19:00+00:00'
         assert.ok(fields[0].value.includes(`<t:${timestamp}:F>`));
         assert.ok(fields[0].value.includes(`<t:${timestamp}:R>`));
       } else {
-        assert.equal(fields.length, 0);
+        assert.match(fields[0].value, /Not scheduled/);
         assert.equal(lobbyManager.get(msg.id).startsAt, undefined);
       }
     } finally {
@@ -117,3 +117,29 @@ for (const [input, expected] of [['19:00', '26 Nov 2026, 19:00'], ['19:00+00:00'
     }
   });
 }
+
+test('AM/PM inputs match 24-hour input, including noon and midnight', () => {
+  for (const [input, expected] of [['8PM','20:00'],['9pm','21:00'],['11AM','11:00'],['8:30 PM','20:30'],['12AM','00:00'],['12PM','12:00']]) {
+    assert.equal(parseStartTime(input, now), parseStartTime(expected, now));
+  }
+  assert.equal(parseStartTime('8PM-05:00', now), parseStartTime('20:00-05:00', now));
+  for (const input of ['0PM','13AM','8:60PM','1900','8','24:00']) assert.throws(() => parseStartTime(input, now));
+});
+test('list renders live roster and schedule without fetching original messages', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now });
+  const { lobbyManager } = require('../dist/lib/LobbyManager');
+  const entry = lobby({ startsAt: parseStartTime('8PM', now) });
+  lobbyManager.create(entry);
+  entry.players.push('4');
+  let payload, deferred = false;
+  try {
+    await execute({ options: { getSubcommand: () => 'list' }, deferReply: async () => { deferred = true; }, editReply: async value => { payload = value; } });
+    assert.equal(deferred, true);
+    const embed = payload.embeds[0].toJSON();
+    assert.match(embed.title, /2\/4/);
+    assert.match(embed.description, /<@4>/);
+    assert.match(embed.fields[0].value, /20:00/);
+    assert.equal(payload.components[0].toJSON().components[0].custom_id, 'join:1');
+    assert.deepEqual(payload.allowedMentions.parse, []);
+  } finally { lobbyManager.delete(entry.id); }
+});

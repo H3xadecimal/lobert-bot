@@ -20,12 +20,34 @@ import {
         .addIntegerOption(o =>
           o.setName('size').setDescription('Number of players').setRequired(true))
         .addStringOption(o =>
-          o.setName('time').setDescription('24-hour HH:mm, e.g. 19:00 (not 1900). Mauritius UTC+4; optional offset: 19:00-05:00')))
+          o.setName('time').setDescription('HH:mm (19:00, not 1900) or 8PM / 8:30PM. Mauritius UTC+4; optional offset: 19:00-05:00')))
     .addSubcommand(sc =>
       sc.setName('list').setDescription('List open lobbies'))
     .addSubcommand(sc =>
       sc.setName('cancel').setDescription('Cancel your lobby'));
   
+  function buildLobbyEmbed({ game, size, players, creatorId, startsAt }: { game: string; size: number; players: string[]; creatorId: string; startsAt?: number }) {
+      const embed = new EmbedBuilder()
+        .setTitle(`${game.toUpperCase()} lobby (${players.length}/${size})`)
+        .setDescription(players.map(id => `<@${id}>${id === creatorId ? " *(creator)*" : ""}`).join("\n") || "*Empty*")
+        .setColor(0x57f287);
+      if (startsAt !== undefined) {
+        const mauritiusTime = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Indian/Mauritius',
+          day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+        }).format(startsAt);
+        const timestamp = Math.floor(startsAt / 1000);
+        embed.addFields({
+          name: 'Scheduled start (Mauritius, UTC+4)',
+          value: `**${mauritiusTime}**\nYour local time: <t:${timestamp}:F>\nStarts <t:${timestamp}:R>`,
+        });
+      }
+  
+      if (startsAt === undefined) embed.addFields({ name: 'Scheduled start', value: 'Not scheduled. Set time when creating a lobby, e.g. 19:00 or 7PM (Mauritius UTC+4).' });
+      return embed;
+  }
+
   export async function execute(interaction: ChatInputCommandInteraction) {
     const sub = interaction.options.getSubcommand();
   
@@ -43,23 +65,8 @@ import {
         }
       }
   
-      const embed = new EmbedBuilder()
-        .setTitle(`${game.toUpperCase()} lobby (${1}/${size})`)
-        .setDescription(`<@${interaction.user.id}> *(creator)*`)
-        .setColor(0x57f287);
-      if (startsAt !== undefined) {
-        const mauritiusTime = new Intl.DateTimeFormat('en-GB', {
-          timeZone: 'Indian/Mauritius',
-          day: '2-digit', month: 'short', year: 'numeric',
-          hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-        }).format(startsAt);
-        const timestamp = Math.floor(startsAt / 1000);
-        embed.addFields({
-          name: 'Scheduled start (Mauritius, UTC+4)',
-          value: `**${mauritiusTime}**\nYour local time: <t:${timestamp}:F>\nStarts <t:${timestamp}:R>`,
-        });
-      }
-  
+      const embed = buildLobbyEmbed({ game, size, players: [interaction.user.id], creatorId: interaction.user.id, startsAt });
+
       const tempRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`join:${interaction.id}`)        // placeholder; fix after send
@@ -110,24 +117,19 @@ import {
         return interaction.reply({ content: 'No open lobbies.', ephemeral: true });
       }
 
+      // Render current state, not a potentially stale or deleted source message.
+      await interaction.deferReply();
       for (const [i, lobby] of open.entries()) {
-        const channel = await interaction.client.channels.fetch(lobby.channelId);
-        if (!channel?.isTextBased()) continue;
-        try {
-          const msg = await channel.messages.fetch(lobby.id);
-          const embed = msg.embeds[0];
-          const components = msg.components;
-          if (i === 0) {
-            await interaction.reply({ embeds: [embed], components });
-          } else {
-            await interaction.followUp({ embeds: [embed], components });
-          }
-        } catch {
-          /* message may be gone */
-        }
+        const embed = buildLobbyEmbed(lobby);
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setCustomId(`join:${lobby.id}`).setLabel('Join').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId(`leave:${lobby.id}`).setLabel('Leave').setStyle(ButtonStyle.Secondary),
+        );
+        const payload = { embeds: [embed], components: [row], allowedMentions: { parse: [] as never[] } };
+        if (i === 0) await interaction.editReply(payload);
+        else await interaction.followUp(payload);
       }
     }
-  
     /* ──────────────── CANCEL ──────────────── */
     else if (sub === 'cancel') {
       const lobby = lobbyManager
