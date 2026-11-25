@@ -74,3 +74,46 @@ test('explicit UTC overrides Mauritius default', () => {
   assert.equal(parseStartTime('21:00+00:00', now), Date.parse('2026-11-25T21:00:00Z'));
   assert.equal(parseStartTime('21:00', now), parseStartTime('21:00+04:00', now));
 });
+
+test('time option explains the colon format with a concrete example', () => {
+  const option = data.toJSON().options.find(o => o.name === 'create').options.find(o => o.name === 'time');
+  assert.match(option.description, /HH:mm/);
+  assert.match(option.description, /19:00/);
+  assert.match(option.description, /not 1900/);
+  assert.ok(option.description.length <= 100);
+});
+test('compact time gets actionable feedback', async () => {
+  let reply;
+  await execute({ options: { getSubcommand: () => 'create', getString: name => name === 'game' ? 'Test' : '1900', getInteger: () => 4 }, reply: async value => { reply = value; } });
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /19:00/);
+  assert.match(reply.content, /colon/);
+});
+for (const [input, expected] of [['19:00', '26 Nov 2026, 19:00'], ['19:00+00:00', '25 Nov 2026, 23:00'], [null, null]]) {
+  test(`create embed confirms accepted schedule: ${input}`, async t => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now });
+    const { lobbyManager } = require('../dist/lib/LobbyManager');
+    let reply;
+    const msg = { id: 'test-message', channel: { id: 'test-channel' }, edit: async () => {} };
+    try {
+      await execute({
+        id: 'interaction-id', user: { id: 'creator' },
+        options: { getSubcommand: () => 'create', getString: name => name === 'game' ? 'Test' : input, getInteger: () => 4 },
+        reply: async value => { reply = value; return { fetch: async () => msg }; },
+      });
+      const fields = reply.embeds[0].toJSON().fields ?? [];
+      if (expected) {
+        assert.equal(fields[0].name, 'Scheduled start (Mauritius, UTC+4)');
+        assert.ok(fields[0].value.includes(expected));
+        const timestamp = Math.floor(lobbyManager.get(msg.id).startsAt / 1000);
+        assert.ok(fields[0].value.includes(`<t:${timestamp}:F>`));
+        assert.ok(fields[0].value.includes(`<t:${timestamp}:R>`));
+      } else {
+        assert.equal(fields.length, 0);
+        assert.equal(lobbyManager.get(msg.id).startsAt, undefined);
+      }
+    } finally {
+      lobbyManager.delete(msg.id);
+    }
+  });
+}

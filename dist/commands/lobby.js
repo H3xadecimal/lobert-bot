@@ -21,7 +21,7 @@ exports.data = new discord_js_1.SlashCommandBuilder()
     .setDescription('Create a new lobby')
     .addStringOption(o => o.setName('game').setDescription('Game name').setRequired(true))
     .addIntegerOption(o => o.setName('size').setDescription('Number of players').setRequired(true))
-    .addStringOption(o => o.setName('time').setDescription('Start HH:mm (Mauritius UTC+4), or include an offset like HH:mm-05:00')))
+    .addStringOption(o => o.setName('time').setDescription('24-hour HH:mm, e.g. 19:00 (not 1900). Mauritius UTC+4; optional offset: 19:00-05:00')))
     .addSubcommand(sc => sc.setName('list').setDescription('List open lobbies'))
     .addSubcommand(sc => sc.setName('cancel').setDescription('Cancel your lobby'));
 function execute(interaction) {
@@ -46,7 +46,16 @@ function execute(interaction) {
                 .setDescription(`<@${interaction.user.id}> *(creator)*`)
                 .setColor(0x57f287);
             if (startsAt !== undefined) {
-                embed.addFields({ name: 'Starts', value: '<t:' + Math.floor(startsAt / 1000) + ':F> (<t:' + Math.floor(startsAt / 1000) + ':R>)' });
+                const mauritiusTime = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: 'Indian/Mauritius',
+                    day: '2-digit', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+                }).format(startsAt);
+                const timestamp = Math.floor(startsAt / 1000);
+                embed.addFields({
+                    name: 'Scheduled start (Mauritius, UTC+4)',
+                    value: `**${mauritiusTime}**\nYour local time: <t:${timestamp}:F>\nStarts <t:${timestamp}:R>`,
+                });
             }
             const tempRow = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
                 .setCustomId(`join:${interaction.id}`) // placeholder; fix after send
