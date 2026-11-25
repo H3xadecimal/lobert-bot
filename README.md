@@ -101,19 +101,3 @@ Maintained by
 ## Dev's To-do list of Features & Bug-fixes
 - ~~Modify the /lobby list command so that it publically(not just the "only you can see this" messages) prints out all the opened lobbies' embed with the join/leave buttons instead of just a list. (People need to keep scrolling up to find the embed and click join/leave)~~
   - Done: `/lobby list` now republishes each lobby's embed with join/leave buttons in the channel.
-
-## Scheduled lobby pings
-
-Use `/lobby create game:Valorant size:5 time:21:00` to ping the current
-lobby roster at the next 21:00 **Mauritius time (Indian/Mauritius, UTC+04:00)**, regardless of the server timezone. Mauritius does not currently observe daylight saving time. To override the default UTC offset, use
-`time:21:00+04:00` or `time:21:00-05:00`. Offsets are fixed; adjust them for
-daylight saving time when needed. Times already reached today mean tomorrow.
-The embed shows the start in each Discord viewer's local timezone.
-
-Scheduled lobbies expire three hours **after their start**, so a start more
-than three hours away is not silently cancelled. Cancelling a lobby cancels
-its ping. The existing lobby-full notification is independent of the start ping.
-Lobbies and timers remain in memory: restarting/stopping the bot loses them.
-
-After updating, run `npm run build`, redeploy slash commands with
-`npm run deploy:cmd`, and restart the bot. Run `npm test` for regression tests.
