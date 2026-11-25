@@ -13,13 +13,15 @@ exports.data = void 0;
 exports.execute = execute;
 const discord_js_1 = require("discord.js");
 const LobbyManager_1 = require("../lib/LobbyManager");
+const startTime_1 = require("../lib/startTime");
 exports.data = new discord_js_1.SlashCommandBuilder()
     .setName('lobby')
     .setDescription('Create or manage game lobbies')
     .addSubcommand(sc => sc.setName('create')
     .setDescription('Create a new lobby')
     .addStringOption(o => o.setName('game').setDescription('Game name').setRequired(true))
-    .addIntegerOption(o => o.setName('size').setDescription('Number of players').setRequired(true)))
+    .addIntegerOption(o => o.setName('size').setDescription('Number of players').setRequired(true))
+    .addStringOption(o => o.setName('time').setDescription('Start time HH:mm (UTC), or HH:mm+04:00 with a UTC offset')))
     .addSubcommand(sc => sc.setName('list').setDescription('List open lobbies'))
     .addSubcommand(sc => sc.setName('cancel').setDescription('Cancel your lobby'));
 function execute(interaction) {
@@ -29,10 +31,23 @@ function execute(interaction) {
         if (sub === 'create') {
             const game = interaction.options.getString('game', true);
             const size = interaction.options.getInteger('size', true);
+            const time = interaction.options.getString('time');
+            let startsAt;
+            if (time !== null) {
+                try {
+                    startsAt = (0, startTime_1.parseStartTime)(time);
+                }
+                catch (error) {
+                    return interaction.reply({ content: error.message, ephemeral: true });
+                }
+            }
             const embed = new discord_js_1.EmbedBuilder()
                 .setTitle(`${game.toUpperCase()} lobby (${1}/${size})`)
                 .setDescription(`<@${interaction.user.id}> *(creator)*`)
                 .setColor(0x57f287);
+            if (startsAt !== undefined) {
+                embed.addFields({ name: 'Starts', value: '<t:' + Math.floor(startsAt / 1000) + ':F> (<t:' + Math.floor(startsAt / 1000) + ':R>)' });
+            }
             const tempRow = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
                 .setCustomId(`join:${interaction.id}`) // placeholder; fix after send
                 .setLabel('Join')
@@ -54,7 +69,8 @@ function execute(interaction) {
                 game,
                 size,
                 players: [interaction.user.id],
-                expiresAt: Date.now() + 3 * 60 * 60 * 1000,
+                startsAt,
+                expiresAt: (startsAt !== null && startsAt !== void 0 ? startsAt : Date.now()) + 3 * 60 * 60 * 1000,
             });
             /* --- replace temp IDs with the real message ID (TS‑safe casts) --- */
             const fixedRow = discord_js_1.ActionRowBuilder.from(tempRow);

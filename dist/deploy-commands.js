@@ -45,21 +45,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const discord_js_1 = require("discord.js");
-const commands = [
-    new discord_js_1.SlashCommandBuilder()
-        .setName('lobby')
-        .setDescription('Create or manage game lobbies')
-        .addSubcommand(sc => sc.setName('create')
-        .setDescription('Create a new lobby')
-        .addStringOption(o => o.setName('game').setDescription('Game name').setRequired(true))
-        .addIntegerOption(o => o.setName('size').setDescription('Number of players').setRequired(true))
-        .addStringOption(o => o.setName('time').setDescription('Optional start time (21:00)')))
-        .addSubcommand(sc => sc.setName('list')
-        .setDescription('List all open lobbies'))
-        .addSubcommand(sc => sc.setName('cancel')
-        .setDescription('Cancel your lobby'))
-        .toJSON(), // convert to raw data
-];
+const lobby_1 = require("./commands/lobby");
+const commands = [lobby_1.data.toJSON()];
 const rest = new discord_js_1.REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 (() => __awaiter(void 0, void 0, void 0, function* () {
     try {

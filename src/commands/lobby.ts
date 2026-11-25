@@ -7,6 +7,7 @@ import {
     SlashCommandBuilder,
   } from 'discord.js';
   import { lobbyManager } from '../lib/LobbyManager';
+  import { parseStartTime } from '../lib/startTime';
   
   export const data = new SlashCommandBuilder()
     .setName('lobby')
@@ -17,7 +18,9 @@ import {
         .addStringOption(o =>
           o.setName('game').setDescription('Game name').setRequired(true))
         .addIntegerOption(o =>
-          o.setName('size').setDescription('Number of players').setRequired(true)))
+          o.setName('size').setDescription('Number of players').setRequired(true))
+        .addStringOption(o =>
+          o.setName('time').setDescription('Start time HH:mm (UTC), or HH:mm+04:00 with a UTC offset')))
     .addSubcommand(sc =>
       sc.setName('list').setDescription('List open lobbies'))
     .addSubcommand(sc =>
@@ -30,11 +33,23 @@ import {
     if (sub === 'create') {
       const game = interaction.options.getString('game', true);
       const size = interaction.options.getInteger('size', true);
+      const time = interaction.options.getString('time');
+      let startsAt: number | undefined;
+      if (time !== null) {
+        try {
+          startsAt = parseStartTime(time);
+        } catch (error) {
+          return interaction.reply({ content: (error as Error).message, ephemeral: true });
+        }
+      }
   
       const embed = new EmbedBuilder()
         .setTitle(`${game.toUpperCase()} lobby (${1}/${size})`)
         .setDescription(`<@${interaction.user.id}> *(creator)*`)
         .setColor(0x57f287);
+      if (startsAt !== undefined) {
+        embed.addFields({ name: 'Starts', value: '<t:' + Math.floor(startsAt / 1000) + ':F> (<t:' + Math.floor(startsAt / 1000) + ':R>)' });
+      }
   
       const tempRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -62,7 +77,8 @@ import {
         game,
         size,
         players: [interaction.user.id],
-        expiresAt: Date.now() + 3 * 60 * 60 * 1000,
+        startsAt,
+        expiresAt: (startsAt ?? Date.now()) + 3 * 60 * 60 * 1000,
       });
   
       /* --- replace temp IDs with the real message ID (TS‑safe casts) --- */
@@ -124,4 +140,3 @@ import {
       await interaction.reply('❌  Lobby cancelled.');
     }
   }
-  

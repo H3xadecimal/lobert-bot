@@ -1,45 +1,69 @@
 import { Collection, Snowflake } from 'discord.js';
 
 export interface Lobby {
-  id: string;                 // Discord message ID
+  id: string;
   channelId: Snowflake;
   creatorId: Snowflake;
   game: string;
   size: number;
-  players: Snowflake[];       // user IDs in join‑order
-  expiresAt: number;          // unix ms timestamp when this lobby auto-expires
+  players: Snowflake[];
+  startsAt?: number;
+  expiresAt: number;
 }
 
-class LobbyManager {
+interface LobbyActions {
+  start(lobby: Lobby): Promise<void>;
+  expire(lobby: Lobby): Promise<void>;
+}
+
+export class LobbyManager {
   #lobbies = new Collection<string, Lobby>();
+  #timers = new Map<string, ReturnType<typeof setTimeout>[]>();
+
+  constructor(private actions: LobbyActions) {}
 
   create(lobby: Lobby) {
+    this.delete(lobby.id);
     this.#lobbies.set(lobby.id, lobby);
-    setTimeout(async () => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    this.#timers.set(lobby.id, timers);
+    if (lobby.startsAt !== undefined) {
+      timers.push(setTimeout(() => {
+        if (this.get(lobby.id) !== lobby) return;
+        void this.actions.start(lobby).catch(error => console.error('Lobby start ping failed:', error));
+      }, Math.max(0, lobby.startsAt - Date.now())));
+    }
+    timers.push(setTimeout(() => {
+      if (this.get(lobby.id) !== lobby) return;
       this.delete(lobby.id);
-      try {
-        const { client } = await import('../index');
-        const channel = await client.channels.fetch(lobby.channelId);
-        if (channel?.isTextBased()) {
-          channel.messages.delete(lobby.id).catch(() => null);
-        }
-      } catch {
-        // ignore
-      }
-    }, 3 * 60 * 60 * 1000);
+      void this.actions.expire(lobby).catch(error => console.error('Lobby expiration failed:', error));
+    }, Math.max(0, lobby.expiresAt - Date.now())));
   }
 
-  get(id: string) {
-    return this.#lobbies.get(id);
-  }
+  get(id: string) { return this.#lobbies.get(id); }
 
   delete(id: string) {
+    for (const timer of this.#timers.get(id) ?? []) clearTimeout(timer);
+    this.#timers.delete(id);
     this.#lobbies.delete(id);
   }
 
-  list() {
-    return Array.from(this.#lobbies.values());
-  }
+  list() { return Array.from(this.#lobbies.values()); }
 }
 
-export const lobbyManager = new LobbyManager();
+export const lobbyManager = new LobbyManager({
+  async start(lobby) {
+    const { client } = await import('../index');
+    const channel = await client.channels.fetch(lobby.channelId);
+    if (!channel?.isTextBased() || !channel.isSendable()) return;
+    await channel.send({
+      content: `⏰ Time for ${lobby.game}! ${lobby.players.map(id => `<@${id}>`).join(' ')}`,
+      allowedMentions: { parse: [], users: lobby.players },
+    });
+  },
+  async expire(lobby) {
+    const { client } = await import('../index');
+    const channel = await client.channels.fetch(lobby.channelId);
+    if (channel?.isTextBased()) await channel.messages.delete(lobby.id);
+  },
+});
