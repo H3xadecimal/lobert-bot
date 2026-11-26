@@ -8,5 +8,8 @@ RUN npm install
 # Copy your source
 COPY . .
 
+# Compile source rather than relying on checked-in build output
+RUN npm run build
+
 # Start the bot
 CMD ["npm", "start"]

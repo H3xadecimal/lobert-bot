@@ -12,9 +12,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN!);
   try {
     console.log('🔄  Refreshing slash commands…');
 
- // ── add these two lines ↓↓↓ for sanity check
- console.log('CLIENT_ID =', process.env.CLIENT_ID);
- console.log('GUILD_ID  =', process.env.GUILD_ID);
+
 
     await rest.put(
       Routes.applicationGuildCommands(
@@ -27,5 +25,6 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN!);
     console.log('✅  Commands deployed to guild.');
   } catch (err) {
     console.error(err);
+    process.exitCode = 1;
   }
 })();

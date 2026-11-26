@@ -21,9 +21,30 @@ exports.data = new discord_js_1.SlashCommandBuilder()
     .setDescription('Create a new lobby')
     .addStringOption(o => o.setName('game').setDescription('Game name').setRequired(true))
     .addIntegerOption(o => o.setName('size').setDescription('Number of players').setRequired(true))
-    .addStringOption(o => o.setName('time').setDescription('24-hour HH:mm, e.g. 19:00 (not 1900). Mauritius UTC+4; optional offset: 19:00-05:00')))
+    .addStringOption(o => o.setName('time').setDescription('HH:mm (19:00, not 1900) or 8PM / 8:30PM. Mauritius UTC+4; optional offset: 19:00-05:00')))
     .addSubcommand(sc => sc.setName('list').setDescription('List open lobbies'))
     .addSubcommand(sc => sc.setName('cancel').setDescription('Cancel your lobby'));
+function buildLobbyEmbed({ game, size, players, creatorId, startsAt }) {
+    const embed = new discord_js_1.EmbedBuilder()
+        .setTitle(`${game.toUpperCase()} lobby (${players.length}/${size})`)
+        .setDescription(players.map(id => `<@${id}>${id === creatorId ? " *(creator)*" : ""}`).join("\n") || "*Empty*")
+        .setColor(0x57f287);
+    if (startsAt !== undefined) {
+        const mauritiusTime = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Indian/Mauritius',
+            day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+        }).format(startsAt);
+        const timestamp = Math.floor(startsAt / 1000);
+        embed.addFields({
+            name: 'Scheduled start (Mauritius, UTC+4)',
+            value: `**${mauritiusTime}**\nYour local time: <t:${timestamp}:F>\nStarts <t:${timestamp}:R>`,
+        });
+    }
+    if (startsAt === undefined)
+        embed.addFields({ name: 'Scheduled start', value: 'Not scheduled. Set time when creating a lobby, e.g. 19:00 or 7PM (Mauritius UTC+4).' });
+    return embed;
+}
 function execute(interaction) {
     return __awaiter(this, void 0, void 0, function* () {
         const sub = interaction.options.getSubcommand();
@@ -41,35 +62,10 @@ function execute(interaction) {
                     return interaction.reply({ content: error.message, ephemeral: true });
                 }
             }
-            const embed = new discord_js_1.EmbedBuilder()
-                .setTitle(`${game.toUpperCase()} lobby (${1}/${size})`)
-                .setDescription(`<@${interaction.user.id}> *(creator)*`)
-                .setColor(0x57f287);
-            if (startsAt !== undefined) {
-                const mauritiusTime = new Intl.DateTimeFormat('en-GB', {
-                    timeZone: 'Indian/Mauritius',
-                    day: '2-digit', month: 'short', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-                }).format(startsAt);
-                const timestamp = Math.floor(startsAt / 1000);
-                embed.addFields({
-                    name: 'Scheduled start (Mauritius, UTC+4)',
-                    value: `**${mauritiusTime}**\nYour local time: <t:${timestamp}:F>\nStarts <t:${timestamp}:R>`,
-                });
-            }
-            const tempRow = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
-                .setCustomId(`join:${interaction.id}`) // placeholder; fix after send
-                .setLabel('Join')
-                .setStyle(discord_js_1.ButtonStyle.Primary), new discord_js_1.ButtonBuilder()
-                .setCustomId(`leave:${interaction.id}`)
-                .setLabel('Leave')
-                .setStyle(discord_js_1.ButtonStyle.Secondary));
-            // Send the message first
-            const reply = yield interaction.reply({
-                embeds: [embed],
-                components: [tempRow],
-            });
-            const msg = yield reply.fetch();
+            const embed = buildLobbyEmbed({ game, size, players: [interaction.user.id], creatorId: interaction.user.id, startsAt });
+            // Attach buttons only after the real message ID is available.
+            yield interaction.reply({ embeds: [embed] });
+            const msg = yield interaction.fetchReply();
             /* --- save lobby in memory --- */
             LobbyManager_1.lobbyManager.create({
                 id: msg.id,
@@ -81,13 +77,8 @@ function execute(interaction) {
                 startsAt,
                 expiresAt: (startsAt !== null && startsAt !== void 0 ? startsAt : Date.now()) + 3 * 60 * 60 * 1000,
             });
-            /* --- replace temp IDs with the real message ID (TS‑safe casts) --- */
-            const fixedRow = discord_js_1.ActionRowBuilder.from(tempRow);
-            fixedRow.components.forEach(btn => {
-                const b = btn;
-                b.setCustomId(b.data.custom_id.replace(interaction.id, msg.id));
-            });
-            yield msg.edit({ components: [fixedRow] });
+            const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder().setCustomId(`join:${msg.id}`).setLabel('Join').setStyle(discord_js_1.ButtonStyle.Primary), new discord_js_1.ButtonBuilder().setCustomId(`leave:${msg.id}`).setLabel('Leave').setStyle(discord_js_1.ButtonStyle.Secondary));
+            yield msg.edit({ components: [row] });
         }
         /* ──────────────── LIST ──────────────── */
         else if (sub === 'list') {
@@ -95,25 +86,30 @@ function execute(interaction) {
             if (!open.length) {
                 return interaction.reply({ content: 'No open lobbies.', ephemeral: true });
             }
-            for (const [i, lobby] of open.entries()) {
-                const channel = yield interaction.client.channels.fetch(lobby.channelId);
-                if (!(channel === null || channel === void 0 ? void 0 : channel.isTextBased()))
-                    continue;
-                try {
-                    const msg = yield channel.messages.fetch(lobby.id);
-                    const embed = msg.embeds[0];
-                    const components = msg.components;
-                    if (i === 0) {
-                        yield interaction.reply({ embeds: [embed], components });
-                    }
-                    else {
-                        yield interaction.followUp({ embeds: [embed], components });
-                    }
-                }
-                catch (_a) {
-                    /* message may be gone */
-                }
+            const lines = open.map(lobby => {
+                const game = lobby.game.replace(/[\r\n]/g, ' ').replace(/([\\*_`~|\[\]])/g, '\\$1');
+                const schedule = lobby.startsAt === undefined
+                    ? 'Not scheduled'
+                    : `<t:${Math.floor(lobby.startsAt / 1000)}:f>`;
+                return `**${game}** (${lobby.players.length}/${lobby.size}) — <@${lobby.creatorId}>\n${schedule}`;
+            });
+            // Discord limits a single embed description to 4096 characters.
+            let description = '';
+            let shown = 0;
+            for (const line of lines) {
+                if (description.length + line.length + 2 > 4000)
+                    break;
+                description += (description ? '\n\n' : '') + line;
+                shown++;
             }
+            if (shown < open.length)
+                description += `\n\n${open.length - shown} more lobbies exceed Discord's single-embed limit.`;
+            const embed = new discord_js_1.EmbedBuilder()
+                .setTitle('Active lobbies')
+                .setColor(0x57f287)
+                .setDescription(description)
+                .setFooter({ text: `${open.length} active lobbies • Times shown in your local timezone` });
+            yield interaction.reply({ embeds: [embed], components: [], allowedMentions: { parse: [] } });
         }
         /* ──────────────── CANCEL ──────────────── */
         else if (sub === 'cancel') {
